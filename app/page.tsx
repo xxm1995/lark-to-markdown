@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import '@uiw/react-md-editor/markdown-editor.css';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import EditorPanel from '../components/EditorPanel';
@@ -16,6 +16,47 @@ const Home: React.FC = () => {
   const [isCopying, setIsCopying] = useState(false);
   const [isMobilePreview, setIsMobilePreview] = useState(true);
   const { themeName, setTheme } = useTheme();
+
+  const historyRef = useRef<string[]>([defaultContent]);
+  const historyIndexRef = useRef(0);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pushHistory = useCallback((value: string) => {
+    const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+    newHistory.push(value);
+    if (newHistory.length > 100) {
+      newHistory.shift();
+    } else {
+      historyIndexRef.current += 1;
+    }
+    historyRef.current = newHistory;
+  }, []);
+
+  const updateMarkdown = useCallback((value: string) => {
+    setMarkdown(value);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      pushHistory(value);
+    }, 500);
+  }, [pushHistory]);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current -= 1;
+      const value = historyRef.current[historyIndexRef.current];
+      setMarkdown(value);
+    }
+  }, []);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current += 1;
+      const value = historyRef.current[historyIndexRef.current];
+      setMarkdown(value);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -86,7 +127,12 @@ const Home: React.FC = () => {
     if (html) {
       e.preventDefault();
       const markdownContent = convertHtmlToMarkdown(html);
-      setMarkdown(markdownContent);
+      const textarea = e.target as HTMLTextAreaElement;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newMarkdown = markdown.slice(0, start) + markdownContent + markdown.slice(end);
+      setMarkdown(newMarkdown);
+      pushHistory(newMarkdown);
     }
   };
 
@@ -110,8 +156,10 @@ const Home: React.FC = () => {
       {/* 左侧编辑器 */}
       <EditorPanel 
         markdown={markdown}
-        onChange={(value) => setMarkdown(value || '')}
+        onChange={updateMarkdown}
         onPaste={handlePaste}
+        undo={undo}
+        redo={redo}
       />
 
       {/* 右侧预览 */}

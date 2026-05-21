@@ -32,7 +32,8 @@ const Home: React.FC = () => {
     historyRef.current = newHistory;
   }, []);
 
-  const updateMarkdown = useCallback((value: string) => {
+  const updateMarkdown = useCallback((value: string | undefined) => {
+    if (value === undefined) return;
     setMarkdown(value);
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
